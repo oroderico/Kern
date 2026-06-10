@@ -4,7 +4,6 @@
 #include "../../qr/viewer.h"
 #include "../../ui/input_helpers.h"
 #include "../../ui/key_info.h"
-#include "../../ui/settings_row.h"
 #include "../../ui/theme_widgets.h"
 #include "../../ui/wallet_source_picker.h"
 #include "../settings/wallet_settings.h"
@@ -19,7 +18,7 @@ static lv_obj_t *settings_button = NULL;
 static lv_obj_t *qr_parent = NULL;
 static lv_obj_t *xpub_parent = NULL;
 static lv_obj_t *picker_row = NULL;
-static lv_obj_t *multisig_switch = NULL;
+static lv_obj_t *policy_dropdown = NULL;
 static wallet_source_picker_t *picker = NULL;
 static wallet_source_t current_source = {0, 0};
 static bool multisig_mode = false;
@@ -132,25 +131,9 @@ static void render_xpub(void) {
   wally_free_string(xpub_str);
 }
 
-// BIP48 only covers SegWit multisig (P2WSH, P2SH-P2WSH). When the user is in
-// singlesig mode on Taproot or Legacy, disable the toggle so they cannot
-// flip into a multisig variant that does not exist for those script types.
-// Always enabled in multisig mode so the user can exit.
-static void update_multisig_switch_state(void) {
-  if (!multisig_switch)
-    return;
-  bool enabled =
-      multisig_mode || current_source.source == 0 || current_source.source == 3;
-  if (enabled)
-    lv_obj_clear_state(multisig_switch, LV_STATE_DISABLED);
-  else
-    lv_obj_add_state(multisig_switch, LV_STATE_DISABLED);
-}
-
 static void picker_changed_cb(const wallet_source_t *src, void *user_data) {
   (void)user_data;
   current_source = *src;
-  update_multisig_switch_state();
   render_xpub();
 }
 
@@ -160,9 +143,9 @@ static void create_picker(void) {
                                   &current_source, picker_changed_cb, NULL);
 }
 
-static void multisig_switch_cb(lv_event_t *e) {
+static void policy_dropdown_cb(lv_event_t *e) {
   (void)e;
-  bool now_multisig = lv_obj_has_state(multisig_switch, LV_STATE_CHECKED);
+  bool now_multisig = lv_dropdown_get_selected(policy_dropdown) == 1;
   if (now_multisig == multisig_mode)
     return;
   multisig_mode = now_multisig;
@@ -171,7 +154,6 @@ static void multisig_switch_cb(lv_event_t *e) {
   current_source = (wallet_source_t){0, current_source.account};
   wallet_source_picker_destroy(picker);
   create_picker();
-  update_multisig_switch_state();
   render_xpub();
 }
 
@@ -233,25 +215,26 @@ static lv_obj_t *create_landscape_layout(void) {
 static void create_picker_row(lv_obj_t *controls_parent, bool landscape) {
   picker_row = create_flex_container(controls_parent, LV_FLEX_FLOW_ROW,
                                      LV_FLEX_ALIGN_SPACE_BETWEEN, 0);
-  lv_obj_set_height(picker_row, LV_SIZE_CONTENT);
   if (landscape) {
+    lv_obj_set_height(picker_row, theme_min_touch_size());
     lv_obj_set_flex_grow(picker_row, 1);
-    lv_obj_set_style_min_height(picker_row, theme_min_touch_size(), 0);
   } else {
+    lv_obj_set_height(picker_row, LV_SIZE_CONTENT);
     lv_obj_set_width(picker_row, LV_PCT(100));
   }
   create_picker();
 }
 
-static void create_multisig_row(lv_obj_t *controls_parent, bool landscape) {
-  lv_obj_t *multisig_row = settings_row_toggle(
-      controls_parent, "Multisig", false, multisig_switch_cb, "Multisig",
-      "BIP48 cosigner xpub for multisig wallets. SegWit only (Native or "
-      "Nested).");
+static void create_policy_dropdown(lv_obj_t *controls_parent, bool landscape) {
+  policy_dropdown =
+      theme_create_dropdown(controls_parent, "Singlesig\nMultisig");
+  lv_dropdown_set_selected(policy_dropdown, multisig_mode ? 1 : 0);
   if (landscape)
-    lv_obj_set_flex_grow(multisig_row, 1);
-  multisig_switch = settings_row_get_widget(multisig_row);
-  update_multisig_switch_state();
+    lv_obj_set_flex_grow(policy_dropdown, 1);
+  else
+    lv_obj_set_width(policy_dropdown, LV_PCT(100));
+  lv_obj_add_event_cb(policy_dropdown, policy_dropdown_cb,
+                      LV_EVENT_VALUE_CHANGED, NULL);
 }
 
 static void create_portrait_content(void) {
@@ -285,8 +268,8 @@ void public_key_page_create(lv_obj_t *parent, void (*return_cb)(void)) {
 
   lv_obj_t *controls_parent =
       landscape ? create_landscape_layout() : public_key_screen;
+  create_policy_dropdown(controls_parent, landscape);
   create_picker_row(controls_parent, landscape);
-  create_multisig_row(controls_parent, landscape);
   if (!landscape)
     create_portrait_content();
 
@@ -317,7 +300,7 @@ void public_key_page_destroy(void) {
   qr_parent = NULL;
   xpub_parent = NULL;
   picker_row = NULL;
-  multisig_switch = NULL;
+  policy_dropdown = NULL;
   return_callback = NULL;
   current_source = (wallet_source_t){0, 0};
   multisig_mode = false;
