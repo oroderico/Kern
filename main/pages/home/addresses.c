@@ -6,6 +6,7 @@
 #include "../../core/storage.h"
 #include "../../core/wallet.h"
 #include "../../qr/scanner.h"
+#include "../../qr/viewer.h"
 #include "../../ui/assets/icons_36.h"
 #include "../../ui/dialog.h"
 #include "../../ui/input_helpers.h"
@@ -273,6 +274,7 @@ static void show_address_detail(int index) {
   lv_qrcode_set_size(qr, square_size - 30); // 15px padding each side
   lv_qrcode_update(qr, address, strlen(address));
   lv_obj_center(qr);
+  qr_viewer_attach_fullscreen(qr_container, address, title);
 
   // Full address text with alternating colored 4-char blocks
   char colored_addr[512];
