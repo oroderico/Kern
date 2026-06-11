@@ -93,13 +93,20 @@ static void back_cb(void) {
 
 /* ---------- File loading ---------- */
 
-// Invoked when the loaded-content flow finishes, errors out, or is backed out
-// of — return to the browser at the same directory, re-listed so a just-saved
-// signed PSBT shows up.
+// Invoked when the loaded-content flow errors out or is backed out of —
+// return to the browser at the same directory so another file can be picked.
 static void load_finished_cb(void) {
   scan_page_destroy();
   load_page_show();
   refresh();
+}
+
+// Invoked when a signing flow runs to completion — nothing left to browse
+// for, so return all the way to the caller (home).
+static void load_complete_cb(void) {
+  scan_page_destroy();
+  if (load_return_cb)
+    load_return_cb();
 }
 
 static void open_file(const char *name) {
@@ -129,7 +136,7 @@ static void open_file(const char *name) {
 
   load_page_hide();
   scan_load_content(lv_screen_active(), data, len, current_path, name,
-                    load_finished_cb);
+                    load_finished_cb, load_complete_cb);
   SECURE_FREE_BUFFER(data, len); // the file may hold a mnemonic
 }
 

@@ -114,6 +114,10 @@ static lv_obj_t *scan_screen = NULL;
 static lv_obj_t *psbt_info_container = NULL;
 static sankey_diagram_t *tx_diagram = NULL;
 static void (*return_callback)(void) = NULL;
+// Invoked instead of return_callback when a signing flow runs to completion
+// (signed PSBT exported, message signature shown) — lets a file-browser caller
+// send back-outs to the browser but completed flows back to home.
+static void (*complete_callback)(void) = NULL;
 static void (*saved_return_callback)(void) = NULL;
 
 // PSBT data
@@ -654,12 +658,13 @@ static char *normalize_file_text(const uint8_t *data, size_t len) {
 
 void scan_load_content(lv_obj_t *parent, const uint8_t *data, size_t len,
                        const char *save_dir, const char *source_name,
-                       void (*return_cb)(void)) {
+                       void (*return_cb)(void), void (*complete_cb)(void)) {
   if (!parent || !data || len == 0)
     return;
 
   reset_export_context(save_dir, source_name);
   return_callback = return_cb;
+  complete_callback = complete_cb;
   scan_screen = theme_create_page_container(parent);
 
   // A file may hold a serialized binary PSBT — try that first (mirroring the
@@ -1460,7 +1465,8 @@ static void deferred_sign_cb(lv_timer_t *timer) {
     return;
   }
 
-  saved_return_callback = return_callback;
+  saved_return_callback =
+      complete_callback ? complete_callback : return_callback;
   show_export_choice();
 }
 
@@ -1745,7 +1751,8 @@ static void message_sign_button_cb(lv_event_t *e) {
     return;
   }
 
-  saved_return_callback = return_callback;
+  saved_return_callback =
+      complete_callback ? complete_callback : return_callback;
 
   qr_viewer_page_create(lv_screen_active(), sig_b64, "Message Signature",
                         return_from_qr_viewer_cb);
@@ -1763,6 +1770,7 @@ void scan_page_create(lv_obj_t *parent, void (*return_cb)(void)) {
   }
 
   return_callback = return_cb;
+  complete_callback = NULL;
   reset_export_context(NULL, NULL);
 
   scan_screen = theme_create_page_container(parent);
@@ -1807,4 +1815,5 @@ void scan_page_destroy(void) {
   }
 
   return_callback = NULL;
+  complete_callback = NULL;
 }

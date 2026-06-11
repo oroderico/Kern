@@ -16,8 +16,10 @@ void scan_page_create(lv_obj_t *parent, void (*return_cb)(void));
  * descriptor, address or mnemonic — skipping the UR/BBQr transport handling.
  * Text content is normalized first (BOM, comment lines, editor line-wrapping).
  * Sets up the scan page's review screens; return_cb is invoked when the flow
- * finishes, fails to parse, or is backed out of, and owns the
- * scan_page_destroy() call.
+ * fails to parse or is backed out of, complete_cb when a signing flow runs to
+ * completion (signed PSBT exported, message signature shown); both own the
+ * scan_page_destroy() call. Pass complete_cb as NULL to fall back to
+ * return_cb.
  * A signed PSBT can be exported back to the same SD-card folder; pass that
  * folder as save_dir (NULL targets the card root) and the original file name
  * as source_name so the saved file is named "signed-<source_name>.<ext>"
@@ -27,11 +29,12 @@ void scan_page_create(lv_obj_t *parent, void (*return_cb)(void));
  * @param len Length of data in bytes
  * @param save_dir Folder to write a saved signed PSBT into, or NULL for root
  * @param source_name Original file name (no path), or NULL for QR sources
- * @param return_cb Callback invoked when the user finishes / backs out
+ * @param return_cb Callback invoked when the user fails out / backs out
+ * @param complete_cb Callback invoked when a signing flow completes, or NULL
  */
 void scan_load_content(lv_obj_t *parent, const uint8_t *data, size_t len,
                        const char *save_dir, const char *source_name,
-                       void (*return_cb)(void));
+                       void (*return_cb)(void), void (*complete_cb)(void));
 
 /**
  * Show the scan page
