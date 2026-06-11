@@ -99,7 +99,8 @@ static void network_dropdown_cb(lv_event_t *e) {
       (sel == 0) ? WALLET_NETWORK_MAINNET : WALLET_NETWORK_TESTNET;
   if (new_network != selected_network) {
     selected_network = new_network;
-    apply_wallet_changes();
+    if (apply_wallet_changes())
+      settings_set_network(new_network);
   }
 }
 
