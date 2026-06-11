@@ -1507,9 +1507,16 @@ static void export_saved_dialog_cb(void *user_data) {
 
 // Writes the signed PSBT to psbt_export_dir under an auto-generated,
 // non-clobbering name, mirroring the source encoding — base64 text saves as
-// .txt, binary as .psbt.
+// .txt, binary as .psbt. Unlike QR export there is no payload-size pressure,
+// so the full PSBT is serialized rather than the trimmed copy.
 static void deferred_export_save_cb(lv_timer_t *timer) {
   (void)timer;
+
+  if (!current_psbt) {
+    dismiss_progress();
+    dialog_show_error_timeout("No PSBT loaded", NULL, 2000);
+    return;
+  }
 
   // The card may have been swapped (no card-detect line) — remount fresh.
   esp_err_t mret = sd_card_remount();
@@ -1563,23 +1570,33 @@ static void deferred_export_save_cb(lv_timer_t *timer) {
 
   esp_err_t wret;
   if (psbt_source_base64) {
-    wret = sd_card_write_file(path, (const uint8_t *)signed_psbt_base64,
-                              strlen(signed_psbt_base64));
+    char *full_b64 = NULL;
+    if (wally_psbt_to_base64(current_psbt, 0, &full_b64) != WALLY_OK) {
+      dialog_show_error_timeout("Failed to encode PSBT", show_export_choice, 0);
+      return;
+    }
+    wret =
+        sd_card_write_file(path, (const uint8_t *)full_b64, strlen(full_b64));
+    wally_free_string(full_b64);
   } else {
-    size_t max_len = (strlen(signed_psbt_base64) * 3) / 4 + 1;
-    uint8_t *bin = malloc(max_len);
+    size_t bin_len = 0;
+    if (wally_psbt_get_length(current_psbt, 0, &bin_len) != WALLY_OK) {
+      dialog_show_error_timeout("Failed to encode PSBT", show_export_choice, 0);
+      return;
+    }
+    uint8_t *bin = malloc(bin_len);
     if (!bin) {
       dialog_show_error_timeout("Out of memory", show_export_choice, 0);
       return;
     }
-    size_t bin_len = 0;
-    if (wally_base64_to_bytes(signed_psbt_base64, 0, bin, max_len, &bin_len) !=
+    size_t written = 0;
+    if (wally_psbt_to_bytes(current_psbt, 0, bin, bin_len, &written) !=
         WALLY_OK) {
       free(bin);
       dialog_show_error_timeout("Failed to encode PSBT", show_export_choice, 0);
       return;
     }
-    wret = sd_card_write_file(path, bin, bin_len);
+    wret = sd_card_write_file(path, bin, written);
     free(bin);
   }
 
