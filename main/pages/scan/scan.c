@@ -1491,6 +1491,11 @@ static void export_show_qr_cb(void) {
   int export_format =
       (scanned_qr_format == -1) ? FORMAT_NONE : scanned_qr_format;
 
+  // File-loaded PSBTs carry no source QR format — default to UR so the
+  // export animates instead of cramming one dense raw QR.
+  if (export_format == FORMAT_NONE && psbt_source_name[0])
+    export_format = FORMAT_UR;
+
   if (!qr_viewer_page_create_with_format(lv_screen_active(), export_format,
                                          signed_psbt_base64, "Signed PSBT",
                                          return_from_qr_viewer_cb)) {
