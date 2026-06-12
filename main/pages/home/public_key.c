@@ -25,7 +25,13 @@ static lv_obj_t *policy_dropdown = NULL;
 static lv_obj_t *progress_dialog = NULL;
 static wallet_source_picker_t *picker = NULL;
 static wallet_source_t current_source = {0, 0};
-static bool multisig_mode = false;
+
+typedef enum {
+  POLICY_SINGLESIG,
+  POLICY_MULTISIG,
+  POLICY_MINISCRIPT,
+} policy_type_t;
+static policy_type_t policy = POLICY_SINGLESIG;
 static void (*return_callback)(void) = NULL;
 
 // Singlesig dropdown index -> BIP purpose number.
@@ -37,7 +43,14 @@ static const uint32_t PURPOSE_FOR_SOURCE[4] = {
 };
 
 static wallet_picker_mode_t current_picker_mode(void) {
-  return multisig_mode ? WALLET_PICKER_MULTISIG_BIP48 : WALLET_PICKER_SINGLESIG;
+  switch (policy) {
+  case POLICY_MULTISIG:
+    return WALLET_PICKER_MULTISIG_BIP48;
+  case POLICY_MINISCRIPT:
+    return WALLET_PICKER_MINISCRIPT;
+  default:
+    return WALLET_PICKER_SINGLESIG;
+  }
 }
 
 static void back_button_cb(lv_event_t *e) {
@@ -67,10 +80,13 @@ static void format_derivation(char *path, size_t path_size, char *compact,
   uint32_t coin = (wallet_get_network() == WALLET_NETWORK_MAINNET) ? 0 : 1;
   uint32_t account = current_source.account;
 
-  if (multisig_mode) {
-    wallet_bip48_script_t script =
-        wallet_source_picker_bip48_script(current_source.source);
-    uint32_t subscript = (script == WALLET_BIP48_P2WSH) ? 2 : 1;
+  if (policy == POLICY_MULTISIG || policy == POLICY_MINISCRIPT) {
+    uint32_t subscript = 2;
+    if (policy == POLICY_MULTISIG) {
+      wallet_bip48_script_t script =
+          wallet_source_picker_bip48_script(current_source.source);
+      subscript = (script == WALLET_BIP48_P2WSH) ? 2 : 1;
+    }
     snprintf(path, path_size, "m/48'/%u'/%u'/%u'", coin, account, subscript);
     snprintf(compact, compact_size, "48h/%uh/%uh/%uh", coin, account,
              subscript);
@@ -147,10 +163,10 @@ static void create_picker(void) {
 
 static void policy_dropdown_cb(lv_event_t *e) {
   (void)e;
-  bool now_multisig = lv_dropdown_get_selected(policy_dropdown) == 1;
-  if (now_multisig == multisig_mode)
+  policy_type_t now = (policy_type_t)lv_dropdown_get_selected(policy_dropdown);
+  if (now == policy)
     return;
-  multisig_mode = now_multisig;
+  policy = now;
 
   // Reset the script index when picker option sets change, but keep account.
   current_source = (wallet_source_t){0, current_source.account};
@@ -324,8 +340,9 @@ static void create_policy_row(lv_obj_t *controls_parent, bool landscape) {
     lv_obj_set_size(parent, LV_PCT(100), LV_SIZE_CONTENT);
   }
 
-  policy_dropdown = theme_create_dropdown(parent, "Singlesig\nMultisig");
-  lv_dropdown_set_selected(policy_dropdown, multisig_mode ? 1 : 0);
+  policy_dropdown =
+      theme_create_dropdown(parent, "Singlesig\nMultisig\nMiniscript");
+  lv_dropdown_set_selected(policy_dropdown, (uint16_t)policy);
   if (landscape)
     lv_obj_set_flex_grow(policy_dropdown, 1);
   else
@@ -360,7 +377,7 @@ void public_key_page_create(lv_obj_t *parent, void (*return_cb)(void)) {
 
   return_callback = return_cb;
   current_source = (wallet_source_t){0, 0};
-  multisig_mode = false;
+  policy = POLICY_SINGLESIG;
 
   bool landscape = theme_is_landscape();
   public_key_screen = create_public_key_screen(parent, landscape);
@@ -406,5 +423,5 @@ void public_key_page_destroy(void) {
   policy_dropdown = NULL;
   return_callback = NULL;
   current_source = (wallet_source_t){0, 0};
-  multisig_mode = false;
+  policy = POLICY_SINGLESIG;
 }

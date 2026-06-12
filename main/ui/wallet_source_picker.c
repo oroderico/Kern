@@ -54,6 +54,8 @@ static bool source_has_account(const wallet_source_picker_t *p) {
     return p->state.source < 4;
   case WALLET_PICKER_MULTISIG_BIP48:
     return true;
+  case WALLET_PICKER_MINISCRIPT:
+    return true;
   }
   return false;
 }
@@ -123,6 +125,9 @@ static void build_options(wallet_picker_mode_t mode, char *out, size_t out_sz) {
   }
   case WALLET_PICKER_MULTISIG_BIP48:
     snprintf(out, out_sz, "Native SegWit\nNested SegWit");
+    return;
+  case WALLET_PICKER_MINISCRIPT:
+    snprintf(out, out_sz, "Native SegWit");
     return;
   }
 }

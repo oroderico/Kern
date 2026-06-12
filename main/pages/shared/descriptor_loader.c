@@ -208,6 +208,10 @@ bool descriptor_loader_show_error(descriptor_validation_result_t result) {
                               NULL, 3000);
     return true;
 
+  case VALIDATION_UNSUPPORTED_MINISCRIPT:
+    dialog_show_error_timeout("Only wsh() miniscript is supported", NULL, 3000);
+    return true;
+
   case VALIDATION_NETWORK_MISMATCH: {
     const char *expected = (wallet_get_network() == WALLET_NETWORK_MAINNET)
                                ? "Testnet"
@@ -354,7 +358,10 @@ static void descriptor_info_confirm_wrapper(const descriptor_info_t *info,
 
   // Title with "Load?" prompt
   char title[48];
-  if (info->is_multisig) {
+  if (info->is_miniscript) {
+    snprintf(title, sizeof(title), "Miniscript (%u key%s) - Load?",
+             info->num_keys, info->num_keys == 1 ? "" : "s");
+  } else if (info->is_multisig) {
     snprintf(title, sizeof(title), "Multisig (%u of %u) - Load?",
              info->threshold, info->num_keys);
   } else {

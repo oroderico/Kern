@@ -185,6 +185,29 @@ static char *extract_xpub_from_key(const char *key_str) {
   return xpub;
 }
 
+// True if the parsed descriptor contains miniscript-only fragments.
+// libwally sets WALLY_MS_IS_DESCRIPTOR at parse start and clears it when a
+// non-descriptor (miniscript) fragment is found; multi()/sortedmulti() keep it.
+static bool descriptor_is_miniscript(const struct wally_descriptor *desc) {
+  uint32_t features = 0;
+  if (wally_descriptor_get_features(desc, &features) != WALLY_OK)
+    return false;
+  return (features & WALLY_MS_IS_DESCRIPTOR) == 0;
+}
+
+// Miniscript is only supported as segwit v0, i.e. wrapped in a plain wsh().
+static bool
+miniscript_wrapper_is_supported(const struct wally_descriptor *desc) {
+  char *canon = NULL;
+  if (wally_descriptor_canonicalize(desc, WALLY_MS_CANONICAL_NO_CHECKSUM,
+                                    &canon) != WALLY_OK ||
+      !canon)
+    return false;
+  bool is_wsh = (strncmp(canon, "wsh(", 4) == 0);
+  wally_free_string(canon);
+  return is_wsh;
+}
+
 // Parse multisig threshold from descriptor string (e.g., "multi(2,..." -> 2)
 static uint32_t parse_multisig_threshold(const char *descriptor_str) {
   const char *multi = strstr(descriptor_str, "multi(");
@@ -211,7 +234,8 @@ static bool extract_descriptor_info(struct wally_descriptor *descriptor,
     return false;
   }
 
-  info->is_multisig = (num_keys > 1);
+  info->is_miniscript = descriptor_is_miniscript(descriptor);
+  info->is_multisig = !info->is_miniscript && (num_keys > 1);
   info->num_keys = (num_keys > DESCRIPTOR_INFO_MAX_KEYS)
                        ? DESCRIPTOR_INFO_MAX_KEYS
                        : num_keys;
@@ -303,7 +327,11 @@ static void build_session_descriptor_label(char out[REGISTRY_LABEL_MAX_LEN]) {
   if (!out)
     return;
 
-  if (current_ctx->info.is_multisig) {
+  if (current_ctx->info.is_miniscript) {
+    snprintf(out, REGISTRY_LABEL_MAX_LEN, "Miniscript (%u key%s)",
+             current_ctx->info.num_keys,
+             current_ctx->info.num_keys == 1 ? "" : "s");
+  } else if (current_ctx->info.is_multisig) {
     snprintf(out, REGISTRY_LABEL_MAX_LEN, "Multisig (%u of %u)",
              current_ctx->info.threshold, current_ctx->info.num_keys);
   } else {
@@ -552,6 +580,13 @@ void descriptor_validate_and_load(const char *descriptor_str,
       parse_descriptor_for_wallet(current_ctx->descriptor_str, &descriptor);
   if (parse_result != VALIDATION_SUCCESS) {
     complete_validation(parse_result);
+    return;
+  }
+
+  if (descriptor_is_miniscript(descriptor) &&
+      !miniscript_wrapper_is_supported(descriptor)) {
+    wally_descriptor_free(descriptor);
+    complete_validation(VALIDATION_UNSUPPORTED_MINISCRIPT);
     return;
   }
 

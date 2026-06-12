@@ -25,6 +25,10 @@ typedef enum {
    * '\'' and 'h' are accepted; coordinators emitting 'H' must be reconfigured.
    */
   VALIDATION_INVALID_HARDENED_NOTATION,
+  /* Descriptor contains miniscript that is not wrapped in a plain wsh().
+   * Only segwit v0 wsh(miniscript) is supported (no tapminiscript, no
+   * sh(wsh()) wrapping, no bare miniscript). */
+  VALIDATION_UNSUPPORTED_MINISCRIPT,
 } descriptor_validation_result_t;
 
 typedef void (*validation_complete_cb)(descriptor_validation_result_t result,
@@ -41,6 +45,7 @@ typedef void (*validation_confirm_cb)(const char *message,
 #define DESCRIPTOR_INFO_MAX_KEYS 15
 typedef struct {
   bool is_multisig;
+  bool is_miniscript;
   uint32_t threshold;
   uint32_t num_keys;
   struct {
