@@ -1561,6 +1561,30 @@ static void test_psbt_classify_multi_input_mixed(void) {
 
 /* ------------------------------------------------------------------ */
 
+/* Register desc_str and regenerate its scripts into *out.
+ * Returns NULL on success, or the name of the failing step. */
+static const char *regen_registry_scripts(const char *desc_str,
+                                          uint32_t multi_index,
+                                          uint32_t child_num,
+                                          expected_scripts_t *out) {
+  registry_clear();
+  if (!registry_add_from_string("t", desc_str, STORAGE_FLASH, false))
+    return "registry_add_from_string";
+  const registry_entry_t *e = registry_find_by_id("t");
+  if (!e)
+    return "entry not found";
+
+  claim_t claim = {0};
+  claim.kind = CLAIM_REGISTRY;
+  claim.registry.entry = e;
+  claim.registry.multi_index = multi_index;
+  claim.registry.child_num = child_num;
+
+  if (!claim_regenerate(&claim, false, out))
+    return "claim_regenerate returned false";
+  return NULL;
+}
+
 static void test_registry_claim(const char *test_name, const char *desc_str,
                                 uint32_t multi_index, uint32_t child_num,
                                 const uint8_t *ref_spk, size_t ref_spk_len,
@@ -1569,26 +1593,11 @@ static void test_registry_claim(const char *test_name, const char *desc_str,
                                 const uint8_t *ref_witness,
                                 size_t ref_witness_len) {
   TEST(test_name);
-  registry_clear();
-  if (!registry_add_from_string("t", desc_str, STORAGE_FLASH, false)) {
-    FAIL("registry_add_from_string");
-    return;
-  }
-  const registry_entry_t *e = registry_find_by_id("t");
-  if (!e) {
-    FAIL("entry not found");
-    return;
-  }
-
-  claim_t claim = {0};
-  claim.kind = CLAIM_REGISTRY;
-  claim.registry.entry = e;
-  claim.registry.multi_index = multi_index;
-  claim.registry.child_num = child_num;
-
   expected_scripts_t out = {0};
-  if (!claim_regenerate(&claim, false, &out)) {
-    FAIL("claim_regenerate returned false");
+  const char *err =
+      regen_registry_scripts(desc_str, multi_index, child_num, &out);
+  if (err) {
+    FAIL(err);
     return;
   }
 
@@ -1616,6 +1625,62 @@ static void test_registry_claim(const char *test_name, const char *desc_str,
   if (ref_witness_len > 0 &&
       memcmp(out.witness, ref_witness, ref_witness_len) != 0) {
     FAIL("witness mismatch");
+    return;
+  }
+  PASS();
+}
+
+/* sortedmulti witness script size: 3 + 34 * num_keys. 15 keys (513 bytes) is
+ * libwally's generation maximum: CHECKMULTISIG is capped at 15 keys and
+ * sh()/wsh() inner scripts at 520 bytes (PSBT_MAX_INNER_SCRIPT_LEN). */
+#define MS_15_KEYS                                                             \
+  "[00000000/48'/0'/0'/2']" XPUB_84 "/0/*,"                                    \
+  "[11111111/48'/0'/0'/2']" XPUB_86 "/0/*,"                                    \
+  "[22222222/48'/0'/0'/2']" XPUB_84 "/1/*,"                                    \
+  "[33333333/48'/0'/0'/2']" XPUB_86 "/1/*,"                                    \
+  "[44444444/48'/0'/0'/2']" XPUB_84 "/2/*,"                                    \
+  "[55555555/48'/0'/0'/2']" XPUB_86 "/2/*,"                                    \
+  "[66666666/48'/0'/0'/2']" XPUB_84 "/3/*,"                                    \
+  "[77777777/48'/0'/0'/2']" XPUB_86 "/3/*,"                                    \
+  "[88888888/48'/0'/0'/2']" XPUB_84 "/4/*,"                                    \
+  "[99999999/48'/0'/0'/2']" XPUB_86 "/4/*,"                                    \
+  "[aaaaaaaa/48'/0'/0'/2']" XPUB_84 "/5/*,"                                    \
+  "[bbbbbbbb/48'/0'/0'/2']" XPUB_86 "/5/*,"                                    \
+  "[cccccccc/48'/0'/0'/2']" XPUB_84 "/6/*,"                                    \
+  "[dddddddd/48'/0'/0'/2']" XPUB_86 "/6/*,"                                    \
+  "[eeeeeeee/48'/0'/0'/2']" XPUB_84 "/7/*"
+
+static void test_registry_claim_wsh_witness_size(const char *test_name,
+                                                 const char *desc_str,
+                                                 size_t expected_witness_len) {
+  TEST(test_name);
+  expected_scripts_t out = {0};
+  const char *err = regen_registry_scripts(desc_str, 0, 0, &out);
+  if (err) {
+    FAIL(err);
+    return;
+  }
+  if (out.witness_len != expected_witness_len) {
+    FAIL("witness_len mismatch");
+    return;
+  }
+  PASS();
+}
+
+static void test_registry_claim_oversize_wsh_fails(void) {
+  TEST("wsh(sortedmulti 8-of-16): regeneration fails cleanly");
+  /* 16 keys parse (libwally allows up to 20) but cannot generate; descriptor
+   * validation rejects these at load time (VALIDATION_UNSUPPORTED_SCRIPT). */
+  const char *desc = "wsh(sortedmulti(8," MS_15_KEYS
+                     ",[ffffffff/48'/0'/0'/2']" XPUB_86 "/7/*))";
+  expected_scripts_t out = {0};
+  const char *err = regen_registry_scripts(desc, 0, 0, &out);
+  if (!err) {
+    FAIL("expected claim_regenerate to fail");
+    return;
+  }
+  if (strcmp(err, "claim_regenerate returned false") != 0) {
+    FAIL(err);
     return;
   }
   PASS();
@@ -1685,6 +1750,23 @@ int main(void) {
                       REF_SHWSH_PKH_SPK, sizeof(REF_SHWSH_PKH_SPK),
                       REF_SHWSH_PKH_REDEEM, sizeof(REF_SHWSH_PKH_REDEEM),
                       REF_SHWSH_PKH_WITNESS, sizeof(REF_SHWSH_PKH_WITNESS));
+  test_registry_claim_wsh_witness_size(
+      "wsh(sortedmulti 5-of-8): 275-byte witness regenerates",
+      "wsh(sortedmulti(5,"
+      "[00000000/48'/0'/0'/2']" XPUB_84 "/0/*,"
+      "[11111111/48'/0'/0'/2']" XPUB_86 "/0/*,"
+      "[22222222/48'/0'/0'/2']" XPUB_84 "/1/*,"
+      "[33333333/48'/0'/0'/2']" XPUB_86 "/1/*,"
+      "[44444444/48'/0'/0'/2']" XPUB_84 "/2/*,"
+      "[55555555/48'/0'/0'/2']" XPUB_86 "/2/*,"
+      "[66666666/48'/0'/0'/2']" XPUB_84 "/3/*,"
+      "[77777777/48'/0'/0'/2']" XPUB_86 "/3/*"
+      "))",
+      275);
+  test_registry_claim_wsh_witness_size(
+      "wsh(sortedmulti 8-of-15): 513-byte witness regenerates (max)",
+      "wsh(sortedmulti(8," MS_15_KEYS "))", 513);
+  test_registry_claim_oversize_wsh_fails();
 
   printf("\n=== psbt_classify_input tests ===\n\n");
 

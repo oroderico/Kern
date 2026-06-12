@@ -13,6 +13,7 @@
 
 #include "descriptor_checksum.h"
 #include "miniscript_policy.h"
+#include "psbt_internal.h"
 #include "registry.h"
 #include "ss_whitelist.h"
 #include "storage.h"
@@ -209,6 +210,21 @@ miniscript_wrapper_is_supported(const struct wally_descriptor *desc) {
   return is_wsh;
 }
 
+// libwally accepts descriptors at parse time that its script generator later
+// rejects: multi()/sortedmulti() above 15 keys and sh()/wsh() inner scripts
+// over PSBT_MAX_INNER_SCRIPT_LEN (520) bytes. Trial-generate the scriptPubKey
+// so unusable descriptors fail at load time instead of at address derivation
+// or signing time. A too-small buffer is reported as WALLY_OK with written >
+// len, hence the explicit written check.
+static bool
+descriptor_scripts_are_generatable(const struct wally_descriptor *desc) {
+  uint8_t work[PSBT_MAX_INNER_SCRIPT_LEN];
+  size_t written = 0;
+  return wally_descriptor_to_script(desc, 0, 0, 0, 0, 0, 0, work, sizeof(work),
+                                    &written) == WALLY_OK &&
+         written <= sizeof(work);
+}
+
 // Parse multisig threshold from descriptor string (e.g., "multi(2,..." -> 2)
 static uint32_t parse_multisig_threshold(const char *descriptor_str) {
   const char *multi = strstr(descriptor_str, "multi(");
@@ -245,9 +261,12 @@ static bool extract_descriptor_info(struct wally_descriptor *descriptor,
       free(policy);
     }
   }
-  info->num_keys = (num_keys > DESCRIPTOR_INFO_MAX_KEYS)
-                       ? DESCRIPTOR_INFO_MAX_KEYS
-                       : num_keys;
+  /* Unreachable for loadable descriptors: the script-size guard caps key
+   * counts well below DESCRIPTOR_INFO_MAX_KEYS. Defensive bound for keys[]. */
+  if (num_keys > DESCRIPTOR_INFO_MAX_KEYS) {
+    return false;
+  }
+  info->num_keys = num_keys;
 
   if (info->is_multisig) {
     info->threshold = parse_multisig_threshold(descriptor_str);
@@ -596,6 +615,12 @@ void descriptor_validate_and_load(const char *descriptor_str,
       !miniscript_wrapper_is_supported(descriptor)) {
     wally_descriptor_free(descriptor);
     complete_validation(VALIDATION_UNSUPPORTED_MINISCRIPT);
+    return;
+  }
+
+  if (!descriptor_scripts_are_generatable(descriptor)) {
+    wally_descriptor_free(descriptor);
+    complete_validation(VALIDATION_UNSUPPORTED_SCRIPT);
     return;
   }
 
