@@ -61,6 +61,9 @@ encode:;
 }
 
 // Parse BlueWallet multisig setup file into a standard descriptor.
+// 15 keys is libwally's CHECKMULTISIG generation cap, enforced for all
+// descriptors by VALIDATION_UNSUPPORTED_SCRIPT.
+#define BLUEWALLET_MAX_KEYS 15
 static char *bluewallet_to_descriptor(const char *text) {
   if (!text)
     return NULL;
@@ -73,7 +76,8 @@ static char *bluewallet_to_descriptor(const char *text) {
 
   unsigned int threshold = 0, num_keys = 0;
   if (sscanf(policy_line, "Policy: %u of %u", &threshold, &num_keys) != 2 ||
-      threshold == 0 || num_keys == 0 || threshold > num_keys || num_keys > 15)
+      threshold == 0 || num_keys == 0 || threshold > num_keys ||
+      num_keys > BLUEWALLET_MAX_KEYS)
     return NULL;
 
   char derivation[64] = {0};
@@ -100,8 +104,8 @@ static char *bluewallet_to_descriptor(const char *text) {
     return NULL;
   }
 
-  char fingerprints[15][9];
-  char *xpubs[15];
+  char fingerprints[BLUEWALLET_MAX_KEYS][9];
+  char *xpubs[BLUEWALLET_MAX_KEYS];
   unsigned int found_keys = 0;
   memset(xpubs, 0, sizeof(xpubs));
 
@@ -211,6 +215,11 @@ bool descriptor_loader_show_error(descriptor_validation_result_t result) {
 
   case VALIDATION_UNSUPPORTED_MINISCRIPT:
     dialog_show_error_timeout("Only wsh() miniscript is supported", NULL, 3000);
+    return true;
+
+  case VALIDATION_UNSUPPORTED_SCRIPT:
+    dialog_show_error_timeout("Script too large (max 15 multisig keys)", NULL,
+                              3000);
     return true;
 
   case VALIDATION_NETWORK_MISMATCH: {

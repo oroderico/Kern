@@ -9,8 +9,6 @@
 #include <wally_core.h>
 #include <wally_descriptor.h>
 
-#define MAX_POLICY_KEYS 26 // one letter per key
-
 bool miniscript_policy_is_miniscript(const struct wally_descriptor *desc) {
   uint32_t features = 0;
   if (wally_descriptor_get_features(desc, &features) != WALLY_OK)
@@ -27,7 +25,7 @@ char *miniscript_policy_string(const struct wally_descriptor *desc) {
 
   uint32_t num_keys = 0;
   if (wally_descriptor_get_num_keys(desc, &num_keys) != WALLY_OK ||
-      num_keys == 0 || num_keys > MAX_POLICY_KEYS) {
+      num_keys == 0 || num_keys > MINISCRIPT_POLICY_MAX_KEYS) {
     wally_free_string(canon);
     return NULL;
   }

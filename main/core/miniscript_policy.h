@@ -6,6 +6,10 @@
 
 struct wally_descriptor;
 
+/* Keys are labeled with one letter ID each, 'A'..'Z'. Shared by the policy
+ * letter substitution and every screen that lists descriptor keys. */
+#define MINISCRIPT_POLICY_MAX_KEYS 26
+
 bool miniscript_policy_is_miniscript(const struct wally_descriptor *desc);
 
 /* Canonical descriptor with each key expression (origin, xpub and child

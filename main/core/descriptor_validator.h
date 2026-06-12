@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "miniscript_policy.h"
 #include "storage.h"
 
 typedef enum {
@@ -29,6 +30,11 @@ typedef enum {
    * Only segwit v0 wsh(miniscript) is supported (no tapminiscript, no
    * sh(wsh()) wrapping, no bare miniscript). */
   VALIDATION_UNSUPPORTED_MINISCRIPT,
+  /* Descriptor parses but libwally cannot generate its scripts: more than
+   * 15 multi()/sortedmulti() keys, or an sh()/wsh() inner script over
+   * PSBT_MAX_INNER_SCRIPT_LEN (520) bytes. Without this check the descriptor
+   * would register but fail at address derivation and signing. */
+  VALIDATION_UNSUPPORTED_SCRIPT,
 } descriptor_validation_result_t;
 
 typedef void (*validation_complete_cb)(descriptor_validation_result_t result,
@@ -41,8 +47,10 @@ typedef void (*validation_confirm_cb)(const char *message,
                                       void (*proceed)(bool confirmed,
                                                       void *user_data));
 
-// Descriptor info for confirmation display
-#define DESCRIPTOR_INFO_MAX_KEYS 15
+/* Descriptor info for confirmation display. One letter ID per key; the
+ * script-size validation (VALIDATION_UNSUPPORTED_SCRIPT) guarantees loadable
+ * descriptors stay well under this cap. */
+#define DESCRIPTOR_INFO_MAX_KEYS MINISCRIPT_POLICY_MAX_KEYS
 typedef struct {
   bool is_multisig;
   bool is_miniscript;
