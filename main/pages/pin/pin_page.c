@@ -52,8 +52,6 @@ static lv_obj_t *content_area = NULL;
 
 // Delay countdown
 static lv_timer_t *delay_timer = NULL;
-// Reveal pause (anti-phishing keyboard hide)
-static lv_timer_t *reveal_timer = NULL;
 static lv_obj_t *delay_label = NULL;
 static lv_obj_t *delay_arc = NULL;
 static uint32_t delay_remaining_sec = 0;
@@ -154,10 +152,6 @@ static void destroy_text_input(void) {
 }
 
 static void clear_state(void) {
-  if (reveal_timer) {
-    lv_timer_delete(reveal_timer);
-    reveal_timer = NULL;
-  }
   if (delay_timer) {
     lv_timer_delete(delay_timer);
     delay_timer = NULL;
@@ -454,15 +448,6 @@ static void render_identicon_to(lv_obj_t *canvas, lv_draw_buf_t *draw_buf,
 // Inline anti-phishing words (shown during unlock as user types)
 // ---------------------------------------------------------------------------
 
-static void reveal_restore_cb(lv_timer_t *timer) {
-  (void)timer;
-  reveal_timer = NULL;
-  if (text_input.keyboard)
-    lv_obj_clear_flag(text_input.keyboard, LV_OBJ_FLAG_HIDDEN);
-  if (text_input.textarea)
-    lv_obj_clear_state(text_input.textarea, LV_STATE_DISABLED);
-}
-
 #ifdef CONFIG_KERN_BOARD_WAVE_35
 static void continue_btn_cb(lv_event_t *e) {
   (void)e;
@@ -512,10 +497,10 @@ static void pin_keystroke_cb(lv_event_t *e) {
         lv_obj_clear_flag(words_container, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(words_warning, LV_OBJ_FLAG_HIDDEN);
         words_visible = true;
-        // Hide keyboard and disable textarea while the user verifies
+#ifdef CONFIG_KERN_BOARD_WAVE_35
+        // Compact screen: hide the keyboard and require a Continue press
         lv_obj_add_flag(text_input.keyboard, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_state(text_input.textarea, LV_STATE_DISABLED);
-#ifdef CONFIG_KERN_BOARD_WAVE_35
         if (!continue_btn) {
           continue_btn = theme_create_button(page_screen, "Continue", true);
           lv_obj_set_size(continue_btn, LV_PCT(60), theme_button_height());
@@ -523,10 +508,6 @@ static void pin_keystroke_cb(lv_event_t *e) {
           lv_obj_add_event_cb(continue_btn, continue_btn_cb, LV_EVENT_CLICKED,
                               NULL);
         }
-#else
-        // 2s pause auto-restores the keyboard
-        reveal_timer = lv_timer_create(reveal_restore_cb, 2000, NULL);
-        lv_timer_set_repeat_count(reveal_timer, 1);
 #endif
         // Cache prefix for change detection (separate from prefix_buf)
         memcpy(keystroke_cache, text, split_pos);
@@ -546,19 +527,15 @@ static void build_unlock_entry_state(void) {
   clear_state();
   build_chrome("Enter PIN");
 
-  // Text input: textarea + eye toggle + full keyboard
   ui_text_input_create(&text_input, page_screen, "", true, input_ready_cb);
   text_input_active = true;
 
-  // Reposition textarea from default y=140 to y=60
-  lv_obj_align(text_input.textarea, LV_ALIGN_TOP_LEFT, LV_HOR_RES * 5 / 100,
-               60);
-  // Re-align eye button to match
-  if (text_input.eye_btn)
-    lv_obj_align_to(text_input.eye_btn, text_input.textarea,
-                    LV_ALIGN_OUT_RIGHT_MID, 5, 0);
+  // Anti-phishing row goes in a reserved band below the textarea
+  lv_obj_update_layout(text_input.textarea);
+  int32_t words_y = lv_obj_get_y(text_input.textarea) +
+                    lv_obj_get_height(text_input.textarea) +
+                    theme_default_padding();
 
-  // Hidden flex row at y=115: identicon + words side-by-side
   words_container = lv_obj_create(page_screen);
   lv_obj_remove_style_all(words_container);
   lv_obj_set_flex_flow(words_container, LV_FLEX_FLOW_ROW);
@@ -566,10 +543,9 @@ static void build_unlock_entry_state(void) {
                         LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_gap(words_container, 12, 0);
   lv_obj_set_size(words_container, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-  lv_obj_align(words_container, LV_ALIGN_TOP_MID, 0, 125);
+  lv_obj_align(words_container, LV_ALIGN_TOP_MID, 0, words_y);
   lv_obj_add_flag(words_container, LV_OBJ_FLAG_HIDDEN);
 
-  // Identicon canvas (120x120 RGB565)
   identicon_draw_buf = lv_draw_buf_create(
       IDENTICON_SIZE, IDENTICON_SIZE, LV_COLOR_FORMAT_RGB565, LV_STRIDE_AUTO);
   if (identicon_draw_buf) {
@@ -578,23 +554,34 @@ static void build_unlock_entry_state(void) {
     lv_obj_set_size(identicon_canvas, IDENTICON_SIZE, IDENTICON_SIZE);
   }
 
-  // Words label (inside container)
   words_label = lv_label_create(words_container);
   lv_label_set_text(words_label, "");
   lv_obj_set_style_text_font(words_label, theme_font_medium(), 0);
   lv_obj_set_style_text_color(words_label, highlight_color(), 0);
 
-  // Hidden warning label below identicon row (125 + 120 + 5 = 250)
   words_warning = lv_label_create(page_screen);
   lv_label_set_text(words_warning, "If image or words don't match, stop!");
   lv_obj_set_style_text_font(words_warning, theme_font_small(), 0);
   lv_obj_set_style_text_color(words_warning, error_color(), 0);
   lv_obj_set_style_text_align(words_warning, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_width(words_warning, LV_PCT(100));
-  lv_obj_align(words_warning, LV_ALIGN_TOP_MID, 0, 260);
+  lv_obj_align(words_warning, LV_ALIGN_TOP_MID, 0,
+               words_y + IDENTICON_SIZE + theme_small_padding());
   lv_obj_add_flag(words_warning, LV_OBJ_FLAG_HIDDEN);
 
-  // Attach keystroke callback if anti-phishing is available
+#ifndef CONFIG_KERN_BOARD_WAVE_35
+  // Size the keyboard below the reserved band up front so it never resizes
+  // when the words appear
+  int32_t kb_top = words_y + IDENTICON_SIZE + theme_small_padding() +
+                   lv_font_get_line_height(theme_font_small()) +
+                   theme_default_padding();
+  int32_t kb_h = LV_VER_RES - kb_top;
+  if (kb_h > LV_HOR_RES)
+    kb_h = LV_HOR_RES;
+  lv_obj_set_size(text_input.keyboard, LV_HOR_RES, kb_h);
+  lv_obj_align(text_input.keyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
+#endif
+
   if (pin_has_anti_phishing()) {
     split_pos = pin_get_split_position();
     lv_obj_add_event_cb(text_input.keyboard, pin_keystroke_cb,
@@ -922,28 +909,37 @@ static void build_delay_state(void) {
   lv_obj_set_style_text_color(title_label, error_color(), 0);
   lv_obj_set_style_text_font(title_label, theme_font_medium(), 0);
   lv_obj_update_layout(title_label);
-  lv_obj_set_y(title_label, lv_obj_get_y(title_label) + 12);
+  lv_obj_set_y(title_label, lv_obj_get_y(title_label) + theme_min_dim() / 60);
 
   create_content_area();
+  lv_obj_set_flex_align(content_area, LV_FLEX_ALIGN_SPACE_EVENLY,
+                        LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
   uint8_t fail = pin_get_fail_count();
   uint8_t max = pin_get_max_failures();
 
-  // Arc size: 1/3 of screen width scales correctly across all boards
   int32_t arc_size = theme_screen_width() / 3;
+  // Drive both from one value — LVGL's arc width defaults to DPI-based, not
+  // screen-scaled, so it wouldn't match the bar otherwise.
+  int32_t track_thickness = theme_min_dim() / 60;
 
-  // Countdown arc — depletes clockwise over the delay period
+  // Guard the range so a 0s delay can't collapse the arc to (0,0)
+  int32_t arc_max = delay_remaining_sec > 0 ? (int32_t)delay_remaining_sec : 1;
   delay_arc = lv_arc_create(content_area);
-  lv_arc_set_range(delay_arc, 0, (int32_t)delay_remaining_sec);
+  lv_arc_set_range(delay_arc, 0, arc_max);
   lv_arc_set_value(delay_arc, (int32_t)delay_remaining_sec);
   lv_arc_set_bg_angles(delay_arc, 0, 360);
+  lv_arc_set_rotation(delay_arc, 270);
   lv_arc_set_mode(delay_arc, LV_ARC_MODE_REVERSE);
   lv_obj_set_size(delay_arc, arc_size, arc_size);
   lv_color_t arc_color = (fail * 2 >= max) ? error_color() : highlight_color();
   lv_obj_set_style_arc_color(delay_arc, arc_color, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_color(delay_arc, disabled_color(), LV_PART_MAIN);
+  lv_obj_set_style_arc_width(delay_arc, track_thickness, LV_PART_MAIN);
+  lv_obj_set_style_arc_width(delay_arc, track_thickness, LV_PART_INDICATOR);
+  lv_obj_remove_style(delay_arc, NULL, LV_PART_KNOB);
   lv_obj_clear_flag(delay_arc, LV_OBJ_FLAG_CLICKABLE);
 
-  // Countdown label centered inside the arc
   delay_label = lv_label_create(delay_arc);
   char buf[16];
   format_delay(buf, sizeof(buf), delay_remaining_sec);
@@ -952,11 +948,21 @@ static void build_delay_state(void) {
   lv_obj_set_style_text_color(delay_label, primary_color(), 0);
   lv_obj_center(delay_label);
 
-  // Attempt severity bar — fills with error_color as attempts are consumed
+  lv_obj_t *attempts = lv_label_create(content_area);
+  char attempts_buf[32];
+  snprintf(attempts_buf, sizeof(attempts_buf), "%u of %u attempts used", fail,
+           max);
+  lv_label_set_text(attempts, attempts_buf);
+  lv_obj_set_style_text_font(attempts, theme_font_small(), 0);
+  lv_obj_set_style_text_color(attempts, secondary_color(), 0);
+  lv_obj_set_style_text_align(attempts, LV_TEXT_ALIGN_CENTER, 0);
+
   lv_obj_t *bar = lv_bar_create(content_area);
   lv_bar_set_range(bar, 0, max);
   lv_bar_set_value(bar, fail, LV_ANIM_OFF);
-  lv_obj_set_size(bar, LV_PCT(80), 12);
+  lv_obj_set_size(bar, LV_PCT(80), track_thickness);
+  lv_obj_set_style_bg_color(bar, disabled_color(), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_bg_color(bar, error_color(), LV_PART_INDICATOR);
 
   delay_timer = lv_timer_create(delay_timer_cb, 1000, NULL);

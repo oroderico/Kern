@@ -113,16 +113,16 @@ void theme_apply_btnmatrix(lv_obj_t *btnmatrix) {
   lv_obj_set_style_border_width(btnmatrix, 0, 0);
   lv_obj_set_style_shadow_width(btnmatrix, 0, 0);
 
-  // Padding
+  // Inter-key gap scales with screen so it stays proportional to key size
   lv_obj_set_style_pad_all(btnmatrix, 4, 0);
-  lv_obj_set_style_pad_row(btnmatrix, 6, 0);
-  lv_obj_set_style_pad_column(btnmatrix, 6, 0);
+  lv_obj_set_style_pad_row(btnmatrix, theme_key_gap(), 0);
+  lv_obj_set_style_pad_column(btnmatrix, theme_key_gap(), 0);
 
   // Button items - normal state
   lv_obj_set_style_bg_color(btnmatrix, COLOR_SURFACE, LV_PART_ITEMS);
   lv_obj_set_style_text_color(btnmatrix, COLOR_WHITE, LV_PART_ITEMS);
   lv_obj_set_style_text_font(btnmatrix, theme_font_small(), LV_PART_ITEMS);
-  lv_obj_set_style_radius(btnmatrix, 6, LV_PART_ITEMS);
+  lv_obj_set_style_radius(btnmatrix, theme_key_gap(), LV_PART_ITEMS);
   lv_obj_set_style_border_width(btnmatrix, 0, LV_PART_ITEMS);
   lv_obj_set_style_shadow_width(btnmatrix, 0, LV_PART_ITEMS);
   lv_obj_set_style_outline_width(btnmatrix, 0, LV_PART_ITEMS);

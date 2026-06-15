@@ -295,13 +295,13 @@ void ui_text_input_create(ui_text_input_t *input, lv_obj_t *parent,
   lv_obj_set_style_bg_color(input->keyboard, lv_color_black(), 0);
   lv_obj_set_style_border_width(input->keyboard, 0, 0);
   lv_obj_set_style_pad_all(input->keyboard, 4, 0);
-  lv_obj_set_style_pad_gap(input->keyboard, 8, 0);
+  lv_obj_set_style_pad_gap(input->keyboard, theme_key_gap(), 0);
   lv_obj_set_style_bg_color(input->keyboard, disabled_color(), LV_PART_ITEMS);
   lv_obj_set_style_text_color(input->keyboard, primary_color(), LV_PART_ITEMS);
   lv_obj_set_style_text_font(input->keyboard, theme_font_small(),
                              LV_PART_ITEMS);
   lv_obj_set_style_border_width(input->keyboard, 0, LV_PART_ITEMS);
-  lv_obj_set_style_radius(input->keyboard, 6, LV_PART_ITEMS);
+  lv_obj_set_style_radius(input->keyboard, theme_key_gap(), LV_PART_ITEMS);
   lv_obj_set_style_bg_color(input->keyboard, highlight_color(),
                             LV_PART_ITEMS | LV_STATE_PRESSED);
   lv_obj_set_style_bg_color(input->keyboard, highlight_color(),
