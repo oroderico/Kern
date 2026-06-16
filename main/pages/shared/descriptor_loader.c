@@ -12,6 +12,7 @@
 #include "../../ui/input_helpers.h"
 #include "../../ui/key_info.h"
 #include "../../ui/menu.h"
+#include "../../ui/text_fit.h"
 #include "../../ui/theme_widgets.h"
 #include <ctype.h>
 #include <stdio.h>
@@ -336,18 +337,6 @@ static void info_confirm_no_cb(lv_event_t *e) {
   info_confirm_respond(e, false);
 }
 
-// Trim xpub for display: first 12 chars + "..." + last 8 chars
-static void trim_xpub_for_display(const char *xpub, char *out,
-                                  size_t out_size) {
-  size_t len = strlen(xpub);
-  if (len <= 23) {
-    strncpy(out, xpub, out_size - 1);
-    out[out_size - 1] = '\0';
-    return;
-  }
-  snprintf(out, out_size, "%.12s...%.8s", xpub, xpub + len - 8);
-}
-
 static lv_color_t policy_token_color(const ms_token_t *tok,
                                      const char *our_letters) {
   switch (tok->kind) {
@@ -521,7 +510,9 @@ static void descriptor_info_confirm_wrapper(const descriptor_info_t *info,
   // content height: the default theme pads the root, so LV_VER_RES would
   // overlap the bottom buttons.
   lv_obj_update_layout(root);
-  lv_coord_t title_h = theme_font_medium()->line_height + 20;
+  // Use the title's laid-out height so a wrapped (multi-line) title on narrow
+  // screens still clears the first key. 10px above (align offset) + 10 below.
+  lv_coord_t title_h = lv_obj_get_height(title_label) + 20;
   lv_coord_t btn_h = theme_button_height();
   lv_obj_t *scroll = lv_obj_create(root);
   lv_obj_set_width(scroll, LV_PCT(100));
@@ -536,36 +527,54 @@ static void descriptor_info_confirm_wrapper(const descriptor_info_t *info,
                         LV_FLEX_ALIGN_START);
   lv_obj_add_flag(scroll, LV_OBJ_FLAG_SCROLLABLE);
 
+  // Resolve the scroll's content width so long xpubs can be cropped to fill it.
+  lv_obj_update_layout(root);
+  int32_t scroll_w = lv_obj_get_content_width(scroll);
+
   // Get current wallet fingerprint for highlighting
   char my_fp[9] = {0};
   key_get_fingerprint_hex(my_fp);
 
   // Key entries
   for (uint32_t i = 0; i < info->num_keys; i++) {
-    // Letter + fingerprint on same row
-    char letter_fp[20];
-    snprintf(letter_fp, sizeof(letter_fp), "%c: %s", 'A' + (char)i,
-             info->keys[i].fingerprint_hex);
+    // Identifier letter at line start, then fingerprint icon + hex
+    char letter_icon[12];
+    snprintf(letter_icon, sizeof(letter_icon), "%c: %s", 'A' + (char)i,
+             ICON_FINGERPRINT);
     bool is_ours = (my_fp[0] != '\0' &&
                     strcasecmp(my_fp, info->keys[i].fingerprint_hex) == 0);
-    lv_obj_t *fp_row =
-        ui_icon_text_row_create(scroll, ICON_FINGERPRINT, letter_fp,
-                                is_ours ? highlight_color() : primary_color());
+    lv_obj_t *fp_row = ui_icon_text_row_create(
+        scroll, letter_icon, info->keys[i].fingerprint_hex,
+        is_ours ? highlight_color() : primary_color());
     if (i > 0)
       lv_obj_set_style_pad_top(fp_row, 12, 0);
 
-    // Trimmed xpub (indented)
-    char trimmed[24];
-    trim_xpub_for_display(info->keys[i].xpub, trimmed, sizeof(trimmed));
-    lv_obj_t *xpub_label = theme_create_label(scroll, trimmed, false);
-    lv_obj_set_style_text_color(xpub_label, secondary_color(), 0);
-    lv_obj_set_style_text_font(xpub_label, theme_font_small(), 0);
-    lv_obj_set_style_pad_left(xpub_label, 20, 0);
+    // Indent the following lines to sit under the fingerprint icon, i.e.
+    // past the "X: " identifier prefix on the first line.
+    char prefix[4];
+    snprintf(prefix, sizeof(prefix), "%c: ", 'A' + (char)i);
+    lv_point_t prefix_size = {0};
+    lv_text_get_size(&prefix_size, prefix, theme_font_small(), 0, 0,
+                     LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    int32_t indent = prefix_size.x;
 
-    // Derivation path row (indented)
-    lv_obj_t *deriv_row = ui_icon_text_row_create(
-        scroll, ICON_DERIVATION, info->keys[i].derivation, secondary_color());
-    lv_obj_set_style_pad_left(deriv_row, 20, 0);
+    // Derivation path row (indented), hardened marks shown as 'h'
+    char deriv[64];
+    strncpy(deriv, info->keys[i].derivation, sizeof(deriv) - 1);
+    deriv[sizeof(deriv) - 1] = '\0';
+    for (char *p = deriv; *p; p++)
+      if (*p == '\'')
+        *p = 'h';
+    lv_obj_t *deriv_row = ui_icon_text_row_create(scroll, ICON_DERIVATION,
+                                                  deriv, secondary_color());
+    lv_obj_set_style_pad_left(deriv_row, indent, 0);
+
+    // Xpub (indented), middle-cropped to fill the remaining width.
+    ui_text_fit_t xpub_fit = ui_text_fit_middle(
+        info->keys[i].xpub, theme_font_small(), scroll_w - indent);
+    lv_obj_t *xpub_row = ui_text_fit_row_create(
+        scroll, &xpub_fit, theme_font_small(), scroll_w, secondary_color());
+    lv_obj_set_style_pad_left(xpub_row, indent, 0);
   }
 
   // Indented miniscript policy with key letters, our keys highlighted

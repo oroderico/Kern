@@ -192,6 +192,7 @@ set(APP_UI_SOURCES
     ${APP_UI_DIR}/wallet_source_picker.c
     ${APP_UI_DIR}/battery.c
     ${APP_UI_DIR}/key_info.c
+    ${APP_UI_DIR}/text_fit.c
     ${APP_UI_DIR}/sankey.c
     ${APP_UI_DIR}/settings_row.c
 )

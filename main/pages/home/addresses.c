@@ -12,6 +12,7 @@
 #include "../../ui/dialog.h"
 #include "../../ui/input_helpers.h"
 #include "../../ui/key_info.h"
+#include "../../ui/text_fit.h"
 #include "../../ui/theme_widgets.h"
 #include "../../ui/wallet_source_picker.h"
 #include "../settings/wallet_settings.h"
@@ -26,12 +27,6 @@
 
 #define NUM_ADDRESSES 8
 #define ADDRESS_INDEX_FIT_ALLOWANCE 6
-#define ADDRESS_PART_LEN 128
-
-typedef struct {
-  char prefix[ADDRESS_PART_LEN];
-  char suffix[ADDRESS_PART_LEN];
-} address_display_t;
 
 static lv_obj_t *addresses_screen = NULL;
 static lv_obj_t *prev_button = NULL;
@@ -129,41 +124,6 @@ static void next_button_cb(lv_event_t *e) {
   refresh_address_list();
 }
 
-static int32_t text_width_px(const char *text, const lv_font_t *font) {
-  lv_point_t size = {0};
-  lv_text_get_size(&size, text, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-  return size.x;
-}
-
-static address_display_t address_display_fit(const char *address,
-                                             const lv_font_t *font,
-                                             int32_t max_width) {
-  address_display_t display = {0};
-  size_t addr_len = strlen(address);
-  int32_t ellipsis_w = text_width_px("...", font);
-
-  snprintf(display.prefix, sizeof(display.prefix), "%s", address);
-  if (text_width_px(display.prefix, font) <= max_width)
-    return display;
-  if (ellipsis_w > max_width)
-    return (address_display_t){0};
-
-  for (size_t visible = addr_len - 1; visible > 1; visible--) {
-    size_t prefix = visible * 55 / 100;
-    size_t suffix = visible - prefix;
-    snprintf(display.prefix, sizeof(display.prefix), "%.*s", (int)prefix,
-             address);
-    snprintf(display.suffix, sizeof(display.suffix), "%s",
-             address + addr_len - suffix);
-    if (text_width_px(display.prefix, font) + ellipsis_w +
-            text_width_px(display.suffix, font) <=
-        max_width)
-      return display;
-  }
-
-  return (address_display_t){0};
-}
-
 static lv_obj_t *create_address_label(lv_obj_t *parent, const char *text,
                                       const lv_font_t *font,
                                       lv_text_align_t align) {
@@ -174,26 +134,6 @@ static lv_obj_t *create_address_label(lv_obj_t *parent, const char *text,
   lv_obj_set_style_text_font(label, font, 0);
   lv_obj_set_style_text_color(label, primary_color(), 0);
   return label;
-}
-
-static void create_address_display(lv_obj_t *parent,
-                                   const address_display_t *display,
-                                   const lv_font_t *font, int32_t width) {
-  lv_obj_t *row = lv_obj_create(parent);
-  lv_obj_set_size(row, width, LV_SIZE_CONTENT);
-  theme_apply_transparent_container(row);
-  lv_obj_set_flex_grow(row, 1);
-  lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER,
-                        LV_FLEX_ALIGN_CENTER);
-  lv_obj_clear_flag(row, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
-
-  create_address_label(row, display->prefix, font, LV_TEXT_ALIGN_LEFT);
-  if (display->suffix[0] != '\0') {
-    create_address_label(row, "...", font, LV_TEXT_ALIGN_CENTER);
-    create_address_label(row, display->suffix, font, LV_TEXT_ALIGN_RIGHT);
-  }
 }
 
 // Detail view back button callback
@@ -364,7 +304,7 @@ static void refresh_address_list(void) {
     snprintf(max_index_text, sizeof(max_index_text),
              "%u:", address_offset + NUM_ADDRESSES - 1);
     int32_t index_w =
-        text_width_px(max_index_text, font) + ADDRESS_INDEX_FIT_ALLOWANCE;
+        ui_text_width_px(max_index_text, font) + ADDRESS_INDEX_FIT_ALLOWANCE;
     int32_t usable_w = theme_screen_width() - 2 * theme_default_padding() - 30;
     int32_t address_w = usable_w - index_w - theme_small_padding();
     if (address_w < 1)
@@ -373,8 +313,8 @@ static void refresh_address_list(void) {
     char index_text[16];
     snprintf(index_text, sizeof(index_text), "%u:", idx);
 
-    address_display_t address_display =
-        address_display_fit(stored_addresses[si], font, address_w);
+    ui_text_fit_t address_display =
+        ui_text_fit_middle(stored_addresses[si], font, address_w);
 
     /* Create clickable button */
     lv_obj_t *btn = lv_btn_create(address_list_container);
@@ -390,7 +330,9 @@ static void refresh_address_list(void) {
         create_address_label(btn, index_text, font, LV_TEXT_ALIGN_RIGHT);
     lv_obj_set_width(index_label, index_w);
 
-    create_address_display(btn, &address_display, font, address_w);
+    lv_obj_t *address_row = ui_text_fit_row_create(btn, &address_display, font,
+                                                   address_w, primary_color());
+    lv_obj_set_flex_grow(address_row, 1);
 
     lv_obj_add_event_cb(btn, address_button_cb, LV_EVENT_CLICKED,
                         (void *)(intptr_t)si);
