@@ -660,6 +660,9 @@ size_t psbt_sign(struct wally_psbt *psbt, bool is_testnet,
 
   size_t signatures_added = 0;
 
+  /* Cache shared sighash midstates so per-input signing is O(n), not O(n^2). */
+  wally_psbt_signing_cache_enable(psbt, 0);
+
   for (size_t i = 0; i < num_inputs; i++) {
     input_ownership_t ownership = psbt_classify_input(psbt, i, is_testnet);
 
@@ -718,6 +721,8 @@ size_t psbt_sign(struct wally_psbt *psbt, bool is_testnet,
       ESP_LOGE(TAG, "Failed to sign input %zu: %d", i, ret);
     }
   }
+
+  wally_psbt_signing_cache_disable(psbt);
 
   return signatures_added;
 }
