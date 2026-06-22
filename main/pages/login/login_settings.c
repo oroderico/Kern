@@ -28,17 +28,36 @@ static void destroy_brightness_page(void);
 
 // ── Screen Brightness detail page ──
 
+static void brightness_apply_level(int32_t level) {
+  if (level < 1)
+    level = 1;
+  else if (level > 10)
+    level = 10;
+
+  lv_slider_set_value(brightness_slider, level, LV_ANIM_ON);
+  bsp_display_brightness_set(level * 10);
+  lv_label_set_text_fmt(brightness_label, "%d", (int)level);
+}
+
 static void brightness_slider_cb(lv_event_t *e) {
   lv_obj_t *slider = lv_event_get_target(e);
-  int32_t val = lv_slider_get_value(slider);
-  bsp_display_brightness_set(val);
-  lv_label_set_text_fmt(brightness_label, "%d%%", (int)val);
+  brightness_apply_level(lv_slider_get_value(slider));
+}
+
+static void brightness_decrease_cb(lv_event_t *e) {
+  (void)e;
+  brightness_apply_level(lv_slider_get_value(brightness_slider) - 1);
+}
+
+static void brightness_increase_cb(lv_event_t *e) {
+  (void)e;
+  brightness_apply_level(lv_slider_get_value(brightness_slider) + 1);
 }
 
 static void brightness_back_cb(lv_event_t *e) {
   (void)e;
-  int32_t val = lv_slider_get_value(brightness_slider);
-  settings_set_brightness((uint8_t)val);
+  int32_t level = lv_slider_get_value(brightness_slider);
+  settings_set_brightness((uint8_t)(level * 10));
   destroy_brightness_page();
   ui_menu_show(settings_menu);
 }
@@ -51,21 +70,40 @@ static void show_brightness_page(void) {
   ui_create_back_button(brightness_screen, brightness_back_cb);
   theme_create_page_title(brightness_screen, "Screen Brightness");
 
-  // Percentage label
+  // Brightness level (1-10); zero is reserved for display sleep/off.
   uint8_t cur = settings_get_brightness();
+  uint8_t level = (cur + 5) / 10;
+  if (level < 1)
+    level = 1;
   brightness_label = lv_label_create(brightness_screen);
-  lv_label_set_text_fmt(brightness_label, "%d%%", (int)cur);
+  lv_label_set_text_fmt(brightness_label, "%d", (int)level);
   lv_obj_set_style_text_font(brightness_label, theme_font_medium(), 0);
   lv_obj_set_style_text_color(brightness_label, primary_color(), 0);
   lv_obj_align(brightness_label, LV_ALIGN_CENTER, 0, -30);
 
-  // Slider
-  brightness_slider = lv_slider_create(brightness_screen);
-  lv_slider_set_range(brightness_slider, 1, 100);
-  lv_slider_set_value(brightness_slider, cur, LV_ANIM_OFF);
-  lv_obj_set_width(brightness_slider, LV_HOR_RES * 60 / 100);
+  // Decrease button, slider and increase button
+  lv_obj_t *brightness_row = theme_create_flex_row(brightness_screen);
+  lv_obj_set_size(brightness_row, LV_PCT(80), theme_min_touch_size());
+  lv_obj_align(brightness_row, LV_ALIGN_CENTER, 0, 20);
+  lv_obj_set_style_pad_column(brightness_row, theme_small_padding(), 0);
+
+  lv_obj_t *decrease_btn =
+      theme_create_button(brightness_row, LV_SYMBOL_LEFT, false);
+  lv_obj_set_size(decrease_btn, theme_min_touch_size(), theme_min_touch_size());
+  lv_obj_add_event_cb(decrease_btn, brightness_decrease_cb, LV_EVENT_CLICKED,
+                      NULL);
+
+  brightness_slider = lv_slider_create(brightness_row);
+  lv_slider_set_range(brightness_slider, 1, 10);
+  lv_slider_set_value(brightness_slider, level, LV_ANIM_OFF);
+  lv_obj_set_flex_grow(brightness_slider, 1);
   lv_obj_set_height(brightness_slider, 10);
-  lv_obj_align(brightness_slider, LV_ALIGN_CENTER, 0, 20);
+
+  lv_obj_t *increase_btn =
+      theme_create_button(brightness_row, LV_SYMBOL_RIGHT, false);
+  lv_obj_set_size(increase_btn, theme_min_touch_size(), theme_min_touch_size());
+  lv_obj_add_event_cb(increase_btn, brightness_increase_cb, LV_EVENT_CLICKED,
+                      NULL);
 
   // Style: orange knob and indicator, dark track
   lv_obj_set_style_bg_color(brightness_slider, highlight_color(),
