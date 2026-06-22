@@ -53,6 +53,7 @@ set(WALLY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../components/libwally-core)
 add_library(wally STATIC
     ${WALLY_DIR}/upstream/src/amalgamation/combined.c
 )
+set_target_properties(wally PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_include_directories(wally PUBLIC
     ${WALLY_DIR}/upstream/include
@@ -319,6 +320,7 @@ file(GLOB_RECURSE CUR_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../components/cUR/src/
 add_library(lvgl STATIC
     ${LVGL_SOURCES}
 )
+set_target_properties(lvgl PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(lvgl PUBLIC
     ${LVGL_DIR}
     ${LVGL_DIR}/src
