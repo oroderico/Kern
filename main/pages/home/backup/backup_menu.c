@@ -8,6 +8,7 @@
 #include "../../store_mnemonic.h"
 #include "mnemonic_qr.h"
 #include "mnemonic_words.h"
+#include "stackbit_1248.h"
 #include <lvgl.h>
 
 static ui_menu_t *backup_menu = NULL;
@@ -26,6 +27,11 @@ static void return_from_mnemonic_qr_cb(void) {
   backup_menu_page_show();
 }
 
+static void return_from_stackbit_cb(void) {
+  stackbit_1248_page_destroy();
+  backup_menu_page_show();
+}
+
 static void (*pending_action)(void) = NULL;
 
 static void launch_words(void) {
@@ -36,6 +42,11 @@ static void launch_words(void) {
 static void launch_qr(void) {
   mnemonic_qr_page_create(lv_screen_active(), return_from_mnemonic_qr_cb);
   mnemonic_qr_page_show();
+}
+
+static void launch_stackbit(void) {
+  stackbit_1248_page_create(lv_screen_active(), return_from_stackbit_cb);
+  stackbit_1248_page_show();
 }
 
 static void danger_confirm_cb(bool confirmed, void *user_data) {
@@ -55,6 +66,8 @@ static void warn_and_launch(void (*action)(void)) {
 static void menu_words_cb(void) { warn_and_launch(launch_words); }
 
 static void menu_qr_cb(void) { warn_and_launch(launch_qr); }
+
+static void menu_stackbit_cb(void) { warn_and_launch(launch_stackbit); }
 
 /* --- Save to Flash / SD callbacks --- */
 
@@ -99,6 +112,7 @@ void backup_menu_page_create(lv_obj_t *parent, void (*return_cb)(void)) {
 
   ui_menu_add_entry(backup_menu, "Words", menu_words_cb);
   ui_menu_add_entry(backup_menu, "QR Code", menu_qr_cb);
+  ui_menu_add_entry(backup_menu, "Stackbit 1248", menu_stackbit_cb);
   ui_menu_add_entry(backup_menu, "Save to Flash", menu_save_flash_cb);
   ui_menu_add_entry(backup_menu, "Save to SD", menu_save_sd_cb);
 }

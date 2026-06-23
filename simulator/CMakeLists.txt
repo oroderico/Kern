@@ -53,6 +53,7 @@ set(WALLY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../components/libwally-core)
 add_library(wally STATIC
     ${WALLY_DIR}/upstream/src/amalgamation/combined.c
 )
+set_target_properties(wally PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_include_directories(wally PUBLIC
     ${WALLY_DIR}/upstream/include
@@ -273,6 +274,8 @@ set(APP_PAGE_SOURCES
     ${APP_PAGES_DIR}/home/backup/backup_menu.c
     ${APP_PAGES_DIR}/home/backup/mnemonic_qr.c
     ${APP_PAGES_DIR}/home/backup/mnemonic_words.c
+    ${APP_PAGES_DIR}/home/backup/stackbit_1248.c
+    ${APP_PAGES_DIR}/home/backup/stackbit_1248_codec.c
     # Settings
     ${APP_PAGES_DIR}/settings/descriptor_manager.c
     ${APP_PAGES_DIR}/settings/wallet_settings.c
@@ -319,6 +322,7 @@ file(GLOB_RECURSE CUR_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../components/cUR/src/
 add_library(lvgl STATIC
     ${LVGL_SOURCES}
 )
+set_target_properties(lvgl PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(lvgl PUBLIC
     ${LVGL_DIR}
     ${LVGL_DIR}/src
@@ -473,3 +477,13 @@ target_link_libraries(kern_sim_storage_smoke PRIVATE
 
 enable_testing()
 add_test(NAME storage_smoke COMMAND kern_sim_storage_smoke)
+
+add_executable(kern_sim_stackbit_1248_test
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/stackbit_1248_test.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../main/pages/home/backup/stackbit_1248_codec.c
+)
+target_include_directories(kern_sim_stackbit_1248_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../main
+)
+target_compile_options(kern_sim_stackbit_1248_test PRIVATE -Wall -Wextra)
+add_test(NAME stackbit_1248 COMMAND kern_sim_stackbit_1248_test)
