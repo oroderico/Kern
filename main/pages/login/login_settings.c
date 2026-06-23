@@ -39,11 +39,6 @@ static void brightness_apply_level(int32_t level) {
   lv_label_set_text_fmt(brightness_label, "%d", (int)level);
 }
 
-static void brightness_slider_cb(lv_event_t *e) {
-  lv_obj_t *slider = lv_event_get_target(e);
-  brightness_apply_level(lv_slider_get_value(slider));
-}
-
 static void brightness_decrease_cb(lv_event_t *e) {
   (void)e;
   brightness_apply_level(lv_slider_get_value(brightness_slider) - 1);
@@ -98,6 +93,7 @@ static void show_brightness_page(void) {
   lv_slider_set_value(brightness_slider, level, LV_ANIM_OFF);
   lv_obj_set_flex_grow(brightness_slider, 1);
   lv_obj_set_height(brightness_slider, 10);
+  lv_obj_remove_flag(brightness_slider, LV_OBJ_FLAG_CLICKABLE);
 
   lv_obj_t *increase_btn =
       theme_create_button(brightness_row, LV_SYMBOL_RIGHT, false);
@@ -105,15 +101,14 @@ static void show_brightness_page(void) {
   lv_obj_add_event_cb(increase_btn, brightness_increase_cb, LV_EVENT_CLICKED,
                       NULL);
 
-  // Style: orange knob and indicator, dark track
+  // Style as a read-only level indicator. The arrow buttons are the only
+  // input method, so hide the slider knob to avoid suggesting it can be
+  // dragged.
   lv_obj_set_style_bg_color(brightness_slider, highlight_color(),
                             LV_PART_INDICATOR);
-  lv_obj_set_style_bg_color(brightness_slider, highlight_color(), LV_PART_KNOB);
   lv_obj_set_style_bg_color(brightness_slider, panel_color(), LV_PART_MAIN);
-  lv_obj_set_style_pad_all(brightness_slider, 8, LV_PART_KNOB);
-
-  lv_obj_add_event_cb(brightness_slider, brightness_slider_cb,
-                      LV_EVENT_VALUE_CHANGED, NULL);
+  lv_obj_set_style_bg_opa(brightness_slider, LV_OPA_TRANSP, LV_PART_KNOB);
+  lv_obj_set_style_pad_all(brightness_slider, 0, LV_PART_KNOB);
 }
 
 static void destroy_brightness_page(void) {
