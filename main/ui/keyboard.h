@@ -70,6 +70,12 @@ typedef struct {
 ui_keyboard_t *ui_keyboard_create(lv_obj_t *parent, const char *title,
                                   ui_keyboard_callback_t callback);
 
+// Shared geometry for QWERTY-compatible input screens. Numeric input methods
+// use these helpers so their input field and key matrix cannot drift away from
+// the standard keyboard layout.
+void ui_keyboard_align_input_label(lv_obj_t *input_label);
+void ui_keyboard_align_key_matrix(lv_obj_t *key_matrix);
+
 /**
  * @brief Update the keyboard title
  *

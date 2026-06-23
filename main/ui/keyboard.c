@@ -82,6 +82,18 @@ static inline bool is_key_enabled(ui_keyboard_t *kb, int key_index) {
          kb->enabled_keys[key_index];
 }
 
+void ui_keyboard_align_input_label(lv_obj_t *input_label) {
+  if (input_label)
+    lv_obj_align(input_label, LV_ALIGN_TOP_MID, 0, 130);
+}
+
+void ui_keyboard_align_key_matrix(lv_obj_t *key_matrix) {
+  if (!key_matrix)
+    return;
+  lv_obj_set_size(key_matrix, LV_PCT(100), LV_PCT(50));
+  lv_obj_align(key_matrix, LV_ALIGN_BOTTOM_MID, 0, 0);
+}
+
 static void kb_event_handler(lv_event_t *e) {
   lv_event_code_t code = lv_event_get_code(e);
   lv_obj_t *btnm = lv_event_get_target(e);
@@ -129,12 +141,11 @@ ui_keyboard_t *ui_keyboard_create(lv_obj_t *parent, const char *title,
   lv_label_set_text(kb->input_label, "_");
   lv_obj_set_style_text_color(kb->input_label, highlight_color(), 0);
   lv_obj_set_style_text_font(kb->input_label, theme_font_medium(), 0);
-  lv_obj_align(kb->input_label, LV_ALIGN_TOP_MID, 0, 130);
+  ui_keyboard_align_input_label(kb->input_label);
 
   kb->btnmatrix = lv_buttonmatrix_create(parent);
   lv_buttonmatrix_set_map(kb->btnmatrix, kb_map);
-  lv_obj_align(kb->btnmatrix, LV_ALIGN_BOTTOM_MID, 0, 0);
-  lv_obj_set_size(kb->btnmatrix, LV_PCT(100), LV_PCT(50));
+  ui_keyboard_align_key_matrix(kb->btnmatrix);
   theme_apply_btnmatrix(kb->btnmatrix);
 
   lv_obj_add_event_cb(kb->btnmatrix, kb_event_handler, LV_EVENT_VALUE_CHANGED,
