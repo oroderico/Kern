@@ -36,6 +36,8 @@ static const char *NUMPAD_MAP[] = {"1",
 // Button ids, not NUMPAD_MAP indices: LVGL does not count "\n" separators.
 #define KEY_IDX_BACKSPACE 9
 #define KEY_IDX_OK 11
+// Button id for each digit value (0-9), same id space as above.
+static const uint8_t DIGIT_BTN_ID[10] = {10, 0, 1, 2, 3, 4, 5, 6, 7, 8};
 
 static uint8_t effective_max_digits(const ui_numeric_keypad_t *keypad) {
   uint8_t max_digits =
@@ -56,6 +58,19 @@ static void update_input_display(ui_numeric_keypad_t *keypad) {
   lv_label_set_text(keypad->input_label, display);
 }
 
+static bool digit_exceeds_max(uint32_t value, uint32_t digit,
+                              uint32_t max_value) {
+  return value > max_value / 10 ||
+         (value == max_value / 10 && digit > max_value % 10);
+}
+
+static uint32_t buf_to_value(const ui_numeric_keypad_t *keypad) {
+  uint32_t value = 0;
+  for (int i = 0; i < keypad->input_len; i++)
+    value = value * 10 + (uint32_t)(keypad->input_buf[i] - '0');
+  return value;
+}
+
 static void update_numpad_buttons(ui_numeric_keypad_t *keypad) {
   if (!keypad->numpad)
     return;
@@ -72,6 +87,19 @@ static void update_numpad_buttons(ui_numeric_keypad_t *keypad) {
     lv_btnmatrix_clear_btn_ctrl(keypad->numpad, KEY_IDX_OK,
                                 LV_BTNMATRIX_CTRL_DISABLED);
   }
+
+  // Disable digits that would push the value past max_value, so an
+  // out-of-range number can't be typed in the first place.
+  uint32_t value = buf_to_value(keypad);
+  for (uint32_t digit = 0; digit <= 9; digit++) {
+    bool blocked = digit_exceeds_max(value, digit, keypad->config.max_value);
+    if (blocked)
+      lv_btnmatrix_set_btn_ctrl(keypad->numpad, DIGIT_BTN_ID[digit],
+                                LV_BTNMATRIX_CTRL_DISABLED);
+    else
+      lv_btnmatrix_clear_btn_ctrl(keypad->numpad, DIGIT_BTN_ID[digit],
+                                  LV_BTNMATRIX_CTRL_DISABLED);
+  }
 }
 
 static bool parse_value(const ui_numeric_keypad_t *keypad,
@@ -82,9 +110,7 @@ static bool parse_value(const ui_numeric_keypad_t *keypad,
   uint32_t value = 0;
   for (int i = 0; i < keypad->input_len; i++) {
     uint32_t digit = (uint32_t)(keypad->input_buf[i] - '0');
-    if (value > keypad->config.max_value / 10 ||
-        (value == keypad->config.max_value / 10 &&
-         digit > keypad->config.max_value % 10))
+    if (digit_exceeds_max(value, digit, keypad->config.max_value))
       return false;
     value = value * 10 + digit;
   }
