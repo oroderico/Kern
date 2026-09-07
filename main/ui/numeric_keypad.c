@@ -91,6 +91,11 @@ static void update_numpad_buttons(ui_numeric_keypad_t *keypad) {
   // Disable digits that would push the value past max_value, so an
   // out-of-range number can't be typed in the first place.
   uint32_t value = buf_to_value(keypad);
+  // Same for the low end: OK stays disabled until min_value is reached.
+  if (!empty && value < keypad->config.min_value)
+    lv_btnmatrix_set_btn_ctrl(keypad->numpad, KEY_IDX_OK,
+                              LV_BTNMATRIX_CTRL_DISABLED);
+
   for (uint32_t digit = 0; digit <= 9; digit++) {
     bool blocked = digit_exceeds_max(value, digit, keypad->config.max_value);
     if (blocked)
